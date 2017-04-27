@@ -22,3 +22,8 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+config.json
+config_test.json
+*.exe
+samp-rediscord
