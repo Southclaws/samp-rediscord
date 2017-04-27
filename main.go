@@ -11,7 +11,7 @@ import (
 type Config struct {
 	RedisAuth    string `json:"redis_auth"`
 	RedisHost    string `json:"redis_host"`
-	RedisPort    int    `json:"redis_port"`
+	RedisPort    string `json:"redis_port"`
 	RedisDBID    int    `json:"redis_dbid"`
 	Domain       string `json:"domain"`
 	DiscordToken string `json:"discord_token"`
