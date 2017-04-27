@@ -156,7 +156,7 @@ func (dm DiscordManager) AddDiscordHandler() {
 // from the game and places them on a message queue to be sent to the Discord channel.
 func (dm DiscordManager) AddGameHandler() {
 	for i := range dm.app.config.DiscordBinds {
-		dm.app.sc.BindMessage(dm.app.config.DiscordBinds[i].InputQueue, func(message string) {
+		dm.app.sc.BindMessage(dm.GetFullRedisKey(dm.app.config.DiscordBinds[i].InputQueue), func(message string) {
 			split := strings.SplitN(message, ":", 2)
 
 			if len(split) != 2 {
@@ -184,7 +184,7 @@ func (dm DiscordManager) AddGameHandler() {
 func (dm DiscordManager) GetOutgoingKeyFromChannelID(channel string) string {
 	for i := range dm.app.config.DiscordBinds {
 		if channel == dm.app.config.DiscordBinds[i].DiscordChannel {
-			return dm.app.config.DiscordBinds[i].OutputQueue
+			return dm.GetFullRedisKey(dm.app.config.DiscordBinds[i].OutputQueue)
 		}
 	}
 	return ""
@@ -194,9 +194,14 @@ func (dm DiscordManager) GetOutgoingKeyFromChannelID(channel string) string {
 // associated with one, otherwise returns an empty string.
 func (dm DiscordManager) GetChannelFromInQueue(queue string) string {
 	for i := range dm.app.config.DiscordBinds {
-		if queue == dm.app.config.DiscordBinds[i].InputQueue {
+		if queue == dm.GetFullRedisKey(dm.app.config.DiscordBinds[i].InputQueue) {
 			return dm.app.config.DiscordBinds[i].DiscordChannel
 		}
 	}
 	return ""
+}
+
+// GetFullRedisKey returns a full redis key for naming queues in the form: myserver.rediscord.queue
+func (dm DiscordManager) GetFullRedisKey(name string) string {
+	return dm.app.config.Domain + ".rediscord." + name
 }
