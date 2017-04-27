@@ -135,15 +135,12 @@ func (dm DiscordManager) AddDiscordHandler() {
 		Destination := dm.GetOutgoingKeyFromChannelID(m.Message.ChannelID)
 
 		if Destination != "" {
-			split := strings.SplitN(m.Message.Content, ": ", 2)
 			duplicate := false
-			if len(split) >= 2 {
-				dm.MessageHistory.Do(func(i interface{}) {
-					if i == split[1] {
-						duplicate = true
-					}
-				})
-			}
+			dm.MessageHistory.Do(func(i interface{}) {
+				if i == m.Message.Content {
+					duplicate = true
+				}
+			})
 
 			if !duplicate {
 				dm.MessagesToGame <- Message{m.Message.Author.Username, m.Message.Content, Destination}
