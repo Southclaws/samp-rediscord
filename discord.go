@@ -132,6 +132,10 @@ func (dm *DiscordManager) Daemon() {
 // the game.
 func (dm DiscordManager) AddDiscordHandler() {
 	dm.DiscordClient.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		if m.Author.Bot {
+			return
+		}
+
 		Destination := dm.GetOutgoingKeyFromChannelID(m.Message.ChannelID)
 
 		if Destination != "" {
