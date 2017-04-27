@@ -68,7 +68,7 @@ Messages come in the `data` field of the event you register and they are in the 
 {
     "redis_auth": "password",
     "redis_host": "my.redis.server",
-    "redis_port": "6379",
+    "redis_port": 6379,
     "redis_dbid": 10,
     "domain": "myserver",
     "discord_token": "discord-app-token",
