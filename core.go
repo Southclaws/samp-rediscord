@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Southclaws/samp-go"
 )
@@ -11,6 +12,7 @@ type App struct {
 	config Config
 	sc     *sampgo.Client
 	dm     *DiscordManager
+	router *Router
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -25,6 +27,13 @@ func Start(config Config) {
 
 	app.sc = sampgo.NewSAMPClient(config.RedisHost, config.RedisPort, config.RedisAuth, config.RedisDBID, config.Domain)
 	app.dm = NewDiscordManager(&app)
+	app.dm.Connect(func() {
+		app.router = NewRouter(&app, app.dm.Send, func(m, c string) error {
+			fmt.Printf("%s>%s", m, c)
+			return nil
+		})
+		app.router.Start()
+	})
 
 	<-app.ctx.Done()
 

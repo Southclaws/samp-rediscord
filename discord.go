@@ -1,37 +1,14 @@
 package main
 
 import (
-	"container/ring"
-	"fmt"
-	"strings"
-
 	"github.com/bwmarrin/discordgo"
 	"go.uber.org/zap"
 )
 
-// Bind represents a link between a Discord channel and a Redis queue
-type Bind struct {
-	DiscordChannel string `json:"channel_id"`
-	InputQueue     string `json:"input_queue"`
-	OutputQueue    string `json:"output_queue"`
-}
-
-// Message represents a message moving through this app
-type Message struct {
-	User string
-	Text string
-	// when in the `MessagesToDiscord` queue, this represents a Discord channel
-	// and when in the `MessagesToGame` queue, it represents a queue name.
-	Destination string
-}
-
 // DiscordManager holds program state and shares access to resources
 type DiscordManager struct {
-	app               *App
-	DiscordClient     *discordgo.Session
-	MessagesToDiscord chan Message // queue of messages waiting to be sent to Discord
-	MessagesToGame    chan Message // queue of messages waiting to be sent to the game server
-	MessageHistory    *ring.Ring   // ring-list of the last n messages processed to block duplicates
+	app           *App
+	DiscordClient *discordgo.Session
 }
 
 // NewDiscordManager sets up a Discord client and prepares it for starting
@@ -49,12 +26,6 @@ func NewDiscordManager(app *App) *DiscordManager {
 		logger.Fatal("failed to create discord client", zap.Error(err))
 	}
 
-	dm.MessagesToDiscord = make(chan Message)
-	dm.MessagesToGame = make(chan Message)
-	dm.MessageHistory = ring.New(32)
-
-	dm.Connect()
-
 	return &dm
 }
 
@@ -64,11 +35,10 @@ func (dm *DiscordManager) Close() error {
 }
 
 // Connect prepares the Discord client library and connects to the API.
-func (dm *DiscordManager) Connect() {
+func (dm *DiscordManager) Connect(callback func()) {
 	// Once the connection is ready, the client is prepared and the daemon multiplexer is started
 	dm.DiscordClient.AddHandler(func(s *discordgo.Session, event *discordgo.Ready) {
-		dm.Prepare()
-		dm.Daemon()
+		callback()
 	})
 
 	err := dm.DiscordClient.Open()
@@ -77,145 +47,10 @@ func (dm *DiscordManager) Connect() {
 	}
 }
 
-// Prepare adds a handler for messages from Discord and a handler for messages from the game.
-func (dm *DiscordManager) Prepare() {
-	dm.AddDiscordHandler()
-	dm.AddGameHandler()
-}
-
-// Daemon is a simple mutiplex select across four processes:
-// - messages coming from Discord and waiting to get sent to the game
-// - messages coming from the game and waiting to get sent to Discord
-// - messages being consumed and sent to the game
-// - messages being consumed and sent to Discord
-// This is a blocking function and exits on fatal error.
-func (dm *DiscordManager) Daemon() {
-	for {
-		select {
-		case message := <-dm.MessagesToDiscord:
-			logger.Debug("send to discord",
-				zap.String("username", message.User),
-				zap.String("message", message.Text),
-				zap.String("Destination", message.Destination))
-
-			dm.MessageHistory.Value = message.Text
-			dm.MessageHistory.Next()
-			Text := fmt.Sprintf("%s: %s", message.User, message.Text)
-
-			sr, err := dm.DiscordClient.ChannelMessageSend(message.Destination, Text)
-			if err != nil {
-				logger.Warn("ChannelMessageSend error",
-					zap.Error(err),
-					zap.Any("sr", sr))
-			}
-
-		case message := <-dm.MessagesToGame:
-			logger.Info("send to game",
-				zap.String("username", message.User),
-				zap.String("message", message.Text),
-				zap.String("Destination", message.Destination))
-
-			dm.MessageHistory.Value = message.Text
-			dm.MessageHistory.Next()
-			raw := fmt.Sprintf("%s:%s", message.User, message.Text)
-
-			err := dm.app.sc.SendMessage(message.Destination, raw)
-			if err != nil {
-				logger.Warn("rm.SendMessage failed", zap.Error(err))
-			}
-		}
+// Send simply sends `message` to `channel`
+func (dm *DiscordManager) Send(message, channel string) error {
+	_, err := dm.DiscordClient.ChannelMessageSend(channel, message)
+	if err != nil {
+		return err
 	}
-}
-
-// AddDiscordHandler uses the Discord client gateway event system to bind the Discord MessageCreate
-// event to a function that consumes a message and places it on the message queue for being sent to
-// the game.
-func (dm DiscordManager) AddDiscordHandler() {
-	dm.DiscordClient.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author.Bot {
-			return
-		}
-
-		Destination := dm.GetOutgoingKeyFromChannelID(m.Message.ChannelID)
-
-		if Destination != "" {
-			duplicate := false
-			dm.MessageHistory.Do(func(i interface{}) {
-				if i == m.Message.Content {
-					duplicate = true
-				}
-			})
-
-			if !duplicate {
-				logger.Debug("received non duplicate message from discord",
-					zap.String("user", m.Message.Author.Username),
-					zap.String("message", m.Message.Content),
-					zap.String("destination", Destination))
-
-				dm.MessagesToGame <- Message{m.Message.Author.Username, m.Message.Content, Destination}
-			}
-		}
-	})
-}
-
-// AddGameHandler uses the samp-go library to bind to a Redis list that contains chat messages sent
-// from the game and places them on a message queue to be sent to the Discord channel.
-func (dm DiscordManager) AddGameHandler() {
-	for _, bind := range dm.app.config.DiscordBinds {
-		logger.Debug("adding game handler", zap.String("input_queue", bind.InputQueue), zap.String("output_queue", bind.OutputQueue), zap.String("discord_channel", bind.DiscordChannel))
-		dm.app.sc.BindMessage(dm.GetFullRedisKey(bind.InputQueue), func(message string) {
-			split := strings.SplitN(message, ":", 2)
-
-			if len(split) != 2 {
-				logger.Warn("received from game: message malformed, no colon delimiter",
-					zap.String("message", message))
-				return
-			}
-
-			duplicate := false
-			dm.MessageHistory.Do(func(i interface{}) {
-				if i == split[1] {
-					duplicate = true
-				}
-			})
-
-			if !duplicate {
-				logger.Debug("received non duplicate message from game",
-					zap.String("user", split[0]),
-					zap.String("message", split[1]),
-					zap.String("input_queue", bind.InputQueue),
-					zap.String("output_queue", bind.OutputQueue),
-					zap.String("discord_channel", bind.DiscordChannel))
-
-				dm.MessagesToDiscord <- Message{split[0], split[1], bind.DiscordChannel}
-			}
-		})
-	}
-}
-
-// GetOutgoingKeyFromChannelID takes a Discord channel ID and returns a Redis queue if it is
-// associated with one, otherwise returns an empty string.
-func (dm DiscordManager) GetOutgoingKeyFromChannelID(channel string) string {
-	for i := range dm.app.config.DiscordBinds {
-		if channel == dm.app.config.DiscordBinds[i].DiscordChannel {
-			return dm.GetFullRedisKey(dm.app.config.DiscordBinds[i].OutputQueue)
-		}
-	}
-	return ""
-}
-
-// GetChannelFromInQueue takes a Redis queue name and returns a Discord channel ID if it is
-// associated with one, otherwise returns an empty string.
-func (dm DiscordManager) GetChannelFromInQueue(queue string) string {
-	for i := range dm.app.config.DiscordBinds {
-		if queue == dm.GetFullRedisKey(dm.app.config.DiscordBinds[i].InputQueue) {
-			return dm.app.config.DiscordBinds[i].DiscordChannel
-		}
-	}
-	return ""
-}
-
-// GetFullRedisKey returns a full redis key for naming queues in the form: myserver.rediscord.queue
-func (dm DiscordManager) GetFullRedisKey(name string) string {
-	return dm.app.config.Domain + ".rediscord." + name
 }
