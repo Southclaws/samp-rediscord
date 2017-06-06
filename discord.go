@@ -175,6 +175,13 @@ func (dm DiscordManager) AddGameHandler() {
 			})
 
 			if !duplicate {
+				logger.Debug("received non duplicate message from game",
+					zap.String("user", split[0]),
+					zap.String("message", split[1]),
+					zap.String("input_queue", bind.InputQueue),
+					zap.String("output_queue", bind.OutputQueue),
+					zap.String("discord_channel", bind.DiscordChannel))
+
 				dm.MessagesToDiscord <- Message{split[0], split[1], bind.DiscordChannel}
 			}
 		})
