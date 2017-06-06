@@ -147,6 +147,11 @@ func (dm DiscordManager) AddDiscordHandler() {
 			})
 
 			if !duplicate {
+				logger.Debug("received non duplicate message from discord",
+					zap.String("user", m.Message.Author.Username),
+					zap.String("message", m.Message.Content),
+					zap.String("destination", Destination))
+
 				dm.MessagesToGame <- Message{m.Message.Author.Username, m.Message.Content, Destination}
 			}
 		}
