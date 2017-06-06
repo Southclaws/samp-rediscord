@@ -156,8 +156,9 @@ func (dm DiscordManager) AddDiscordHandler() {
 // AddGameHandler uses the samp-go library to bind to a Redis list that contains chat messages sent
 // from the game and places them on a message queue to be sent to the Discord channel.
 func (dm DiscordManager) AddGameHandler() {
-	for i := range dm.app.config.DiscordBinds {
-		dm.app.sc.BindMessage(dm.GetFullRedisKey(dm.app.config.DiscordBinds[i].InputQueue), func(message string) {
+	for _, bind := range dm.app.config.DiscordBinds {
+		logger.Debug("adding game handler", zap.String("input_queue", bind.InputQueue), zap.String("output_queue", bind.OutputQueue), zap.String("discord_channel", bind.DiscordChannel))
+		dm.app.sc.BindMessage(dm.GetFullRedisKey(bind.InputQueue), func(message string) {
 			split := strings.SplitN(message, ":", 2)
 
 			if len(split) != 2 {
@@ -174,7 +175,7 @@ func (dm DiscordManager) AddGameHandler() {
 			})
 
 			if !duplicate {
-				dm.MessagesToDiscord <- Message{split[0], split[1], dm.app.config.DiscordBinds[i].DiscordChannel}
+				dm.MessagesToDiscord <- Message{split[0], split[1], bind.DiscordChannel}
 			}
 		})
 	}
