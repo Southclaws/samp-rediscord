@@ -65,6 +65,7 @@ func (r *Router) Daemon() {
 			r.MessageHistory.Value = message.Text
 			r.MessageHistory.Next()
 
+			message.Destination = r.app.dcChannel[message.Origin]
 			r.dcSender <- message
 
 		case message := <-r.dcReceiver:
@@ -86,6 +87,7 @@ func (r *Router) Daemon() {
 			r.MessageHistory.Value = message.Text
 			r.MessageHistory.Next()
 
+			message.Destination = r.app.GetFullRedisKey(r.app.gsChannel[message.Origin]) + ".incoming"
 			r.gsSender <- message
 		}
 	}

@@ -31,7 +31,7 @@ func NewGameManager(app *App, channels []string) *GameManager {
 		app.config.Domain)
 
 	for _, channel := range channels {
-		gm.GameClient.BindMessage(gm.app.GetFullRedisKey(channel), func(message string) {
+		gm.GameClient.BindMessage(gm.app.GetFullRedisKey(channel)+".outgoing", func(message string) {
 			split := strings.SplitN(message, ":", 2)
 
 			if len(split) != 2 {

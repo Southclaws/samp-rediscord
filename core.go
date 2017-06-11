@@ -60,20 +60,6 @@ func Start(config Config) {
 	app.dm.Close()
 }
 
-// GetOutgoingKeyFromChannelID takes a Discord channel ID and returns a Redis queue if it is
-// associated with one, otherwise returns an empty string.
-func (app App) GetOutgoingKeyFromChannelID(channel string) (string, bool) {
-	result, ok := app.gsChannel[channel]
-	return app.GetFullRedisKey(result), ok
-}
-
-// GetChannelFromInQueue takes a Redis queue name and returns a Discord channel ID if it is
-// associated with one, otherwise returns an empty string.
-func (app App) GetChannelFromInQueue(queue string) (string, bool) {
-	result, ok := app.dcChannel[queue]
-	return result, ok
-}
-
 // GetFullRedisKey returns a full redis key for naming queues in the form: myserver.rediscord.queue
 func (app App) GetFullRedisKey(name string) string {
 	return app.config.Domain + ".rediscord." + name
