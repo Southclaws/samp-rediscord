@@ -11,14 +11,16 @@ import (
 type GameManager struct {
 	app        *App
 	GameClient *sampgo.Client
-	sender     chan Message
-	receiver   chan Message
+	Sender     chan Message
+	Receiver   chan Message
 }
 
 // NewGameManager sets up a Game client and prepares it for starting
 func NewGameManager(app *App, channels []string) *GameManager {
 	gm := GameManager{
-		app: app,
+		app:      app,
+		Sender:   make(chan Message),
+		Receiver: make(chan Message),
 	}
 
 	gm.GameClient = sampgo.NewSAMPClient(
@@ -43,7 +45,7 @@ func NewGameManager(app *App, channels []string) *GameManager {
 				zap.String("message", split[1]),
 				zap.String("origin", channel))
 
-			gm.receiver <- Message{
+			gm.Receiver <- Message{
 				User:   split[0],
 				Text:   split[1],
 				Origin: channel,
@@ -52,15 +54,6 @@ func NewGameManager(app *App, channels []string) *GameManager {
 	}
 
 	return &gm
-}
-
-// Send simply sends `message` to `channel`
-func (gm *GameManager) Send(message Message) {
-}
-
-// Receive returns a channel to send messages
-func (gm *GameManager) Receive() <-chan Message {
-	return gm.receiver
 }
 
 // Daemon passes messages between rediscord and the Discord API

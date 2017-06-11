@@ -50,7 +50,7 @@ func Start(config Config) {
 	app.gm = NewGameManager(&app, channels)
 	app.dm = NewDiscordManager(&app, channels)
 	app.dm.Connect(func() {
-		app.router = NewRouter(&app, app.dm.Send, app.gm.Send)
+		app.router = NewRouter(&app, app.dm.Sender, app.gm.Sender, app.dm.Receiver, app.gm.Receiver)
 		app.router.Start()
 	})
 

@@ -8,23 +8,23 @@ import (
 
 // Router handles routing messages between Discord channels and game chats
 type Router struct {
-	app               *App
-	dcSender          func(message Message) // discord sender
-	gsSender          func(message Message) // gameserver sender
-	MessagesToDiscord chan Message          // queue of messages waiting to be sent to Discord
-	MessagesToGame    chan Message          // queue of messages waiting to be sent to the game server
-	MessageHistory    *ring.Ring            // ring-list of the last n messages processed to block duplicates
+	app            *App
+	dcSender       chan<- Message // discord sender
+	gsSender       chan<- Message // gameserver sender
+	dcReceiver     <-chan Message // discord receiver
+	gsReceiver     <-chan Message // gameserver receiver
+	MessageHistory *ring.Ring     // ring-list of the last n messages processed to block duplicates
 }
 
 // NewRouter creates a new router, connects to Discord/Redis and starts routing
-func NewRouter(app *App, dcSender func(Message), gsSender func(Message)) *Router {
+func NewRouter(app *App, dcSender chan<- Message, gsSender chan<- Message, dcReceiver <-chan Message, gsReceiver <-chan Message) *Router {
 	router := &Router{
-		app:               app,
-		dcSender:          dcSender,
-		gsSender:          gsSender,
-		MessagesToDiscord: make(chan Message),
-		MessagesToGame:    make(chan Message),
-		MessageHistory:    ring.New(32),
+		app:            app,
+		dcSender:       dcSender,
+		gsSender:       gsSender,
+		dcReceiver:     dcReceiver,
+		gsReceiver:     gsReceiver,
+		MessageHistory: ring.New(32),
 	}
 
 	return router
@@ -46,7 +46,7 @@ func (r *Router) Daemon() {
 	var duplicate bool
 	for {
 		select {
-		case message := <-r.MessagesToDiscord:
+		case message := <-r.gsReceiver:
 			duplicate = false
 			r.MessageHistory.Do(func(i interface{}) {
 				if i == message.Text {
@@ -65,9 +65,9 @@ func (r *Router) Daemon() {
 			r.MessageHistory.Value = message.Text
 			r.MessageHistory.Next()
 
-			r.dcSender(message)
+			r.dcSender <- message
 
-		case message := <-r.MessagesToGame:
+		case message := <-r.dcReceiver:
 			duplicate = false
 			r.MessageHistory.Do(func(i interface{}) {
 				if i == message.Text {
@@ -86,7 +86,7 @@ func (r *Router) Daemon() {
 			r.MessageHistory.Value = message.Text
 			r.MessageHistory.Next()
 
-			r.gsSender(message)
+			r.gsSender <- message
 		}
 	}
 }

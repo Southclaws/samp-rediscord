@@ -11,8 +11,8 @@ import (
 type DiscordManager struct {
 	app           *App
 	DiscordClient *discordgo.Session
-	sender        chan Message
-	receiver      chan Message
+	Sender        chan Message
+	Receiver      chan Message
 	channels      []string
 }
 
@@ -22,6 +22,8 @@ func NewDiscordManager(app *App, channels []string) *DiscordManager {
 
 	dm := DiscordManager{
 		app:      app,
+		Sender:   make(chan Message),
+		Receiver: make(chan Message),
 		channels: channels,
 	}
 
@@ -51,7 +53,7 @@ func (dm *DiscordManager) Connect(callback func()) {
 				}
 			}
 			if found {
-				dm.receiver <- Message{
+				dm.Receiver <- Message{
 					User:   m.Author.Username,
 					Text:   m.Content,
 					Origin: m.ChannelID,
@@ -68,19 +70,9 @@ func (dm *DiscordManager) Connect(callback func()) {
 	}
 }
 
-// Send simply sends `message` to `channel`
-func (dm *DiscordManager) Send(message Message) {
-	dm.sender <- message
-}
-
-// Receive returns a channel to send messages
-func (dm *DiscordManager) Receive() <-chan Message {
-	return dm.receiver
-}
-
 // Daemon passes messages between rediscord and the Discord API
 func (dm *DiscordManager) Daemon() {
-	for msg := range dm.sender {
+	for msg := range dm.Sender {
 		_, err := dm.DiscordClient.ChannelMessageSend(msg.Destination, fmt.Sprintf("%s: %s", msg.User, msg.Text))
 		if err != nil {
 			logger.Error("ChannelMessageSend failed", zap.Error(err))
