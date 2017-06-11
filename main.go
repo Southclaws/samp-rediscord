@@ -39,7 +39,7 @@ func init() {
 func main() {
 	cfg := loadConfig("config.json")
 
-	logger.Info("initialising goss", zap.Any("config", cfg))
+	logger.Info("initialising rediscord", zap.Any("config", cfg))
 
 	Start(cfg)
 }
